@@ -1,0 +1,26 @@
+[project]
+name = "ros2-package"
+version = "0.1.0"
+description = "A ROS2 package"
+requires-python = ">=3.10"
+
+[tool.uv]
+dev-dependencies = [
+    "pyright",
+    "ruff",
+    "pre-commit",
+    "setuptools",
+]
+
+[tool.pyright]
+pythonVersion = "3.10"
+pythonPlatform = "Linux"
+venvPath = "."
+venv = ".venv"
+# Point Pyright at ROS2 packages for IntelliSense
+extraPaths = [
+    "/opt/ros/kilted/lib/python3.12/site-packages",
+]
+
+[tool.ruff]
+line-length = 100
