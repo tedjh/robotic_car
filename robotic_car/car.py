@@ -1,6 +1,7 @@
 import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
+import serial
 
 from std_msgs.msg import String
 
@@ -15,10 +16,12 @@ class Car(Node):
             self.listener_callback,
             10)
         self.subscription  # prevent unused variable warning
-
+        self.ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
+    
     def listener_callback(self, msg):
         self.get_logger().info('I heard: "%s"' % msg.data)
-
+        
+        self.ser.write(msg.data.encode())
 
 def main(args=None):
     try:
@@ -27,7 +30,7 @@ def main(args=None):
 
             rclpy.spin(car)
     except (KeyboardInterrupt, ExternalShutdownException):
-        pass
+        car.ser.close()
 
 
 if __name__ == '__main__':

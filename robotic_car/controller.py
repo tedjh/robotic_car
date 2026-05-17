@@ -16,10 +16,18 @@ import tty
 import termios
 
 import rclpy
-from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 
 from std_msgs.msg import String
+
+COMMANDS = {
+    "w": "W",  # forward
+    "r": "R",  # backward
+    "a": "A",  # left
+    "d": "D",  # right
+    "s": "S",  # stop
+    "q": None,  # quit
+}
 
 def get_key(settings):
     tty.setraw(sys.stdin.fileno())
@@ -32,7 +40,7 @@ class Controller(Node):
     def __init__(self):
         super().__init__('controller')
         self.publisher_ = self.create_publisher(String, 'velocity', 10)
-        self.get_logger().info('Teleop node started, use keys to publish, Ctrl+C to quit')
+        self.get_logger().info('Teleop node started, use W/A/S/D for movement, Ctrl+C to quit')
         #timer_period = 0.5  # seconds
         #self.timer = self.create_timer(timer_period, self.timer_callback)
         #self.i = 0
@@ -48,14 +56,15 @@ class Controller(Node):
         try:
             while rclpy.ok():
                 key = get_key(settings)
-
+                
                 if key == '\x03':  # Ctrl+C
                     break
-
-                msg = String()
-                msg.data = key
-                self.publisher_.publish(msg)
-                self.get_logger().info(f'Published key: {repr(key)}')
+                cmd = COMMANDS.get(key)
+                if cmd is not None:
+                    msg = String()
+                    msg.data = cmd
+                    self.publisher_.publish(msg)
+                    self.get_logger().info(f'Published command: {repr(cmd)}')
         finally:
             # Restore terminal settings on exit
             termios.tcsetattr(sys.stdin, termios.TCSADRAIN, settings)

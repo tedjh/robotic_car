@@ -10,6 +10,7 @@ dev-dependencies = [
     "ruff",
     "pre-commit",
     "setuptools",
+    "pyserial",
 ]
 
 [tool.pyright]
