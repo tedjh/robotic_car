@@ -15,7 +15,7 @@ class Car(Node):
             'velocity',
             self.listener_callback,
             10)
-        self.subscription  # prevent unused variable warning
+        self.subscription
         self.ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
     
     def listener_callback(self, msg):
@@ -24,10 +24,9 @@ class Car(Node):
         self.ser.write(msg.data.encode())
 
 def main(args=None):
+    car = Car()
     try:
         with rclpy.init(args=args):
-            car = Car()
-
             rclpy.spin(car)
     except (KeyboardInterrupt, ExternalShutdownException):
         car.ser.close()

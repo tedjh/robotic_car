@@ -29,6 +29,15 @@ COMMANDS = {
     "q": None,  # quit
 }
 
+NEW_COMMANDS = {
+    "w": "150,1,150,1",  # forward
+    "r": "150,0,150,0",  # backward
+    "a": "50,1,150,1",  # left
+    "d": "150,1,50,1",  # right
+    "s": "0,1,0,1",  # stop
+    "q": None,  # quit
+}
+
 def get_key(settings):
     tty.setraw(sys.stdin.fileno())
     key = sys.stdin.read(1)
@@ -41,16 +50,7 @@ class Controller(Node):
         super().__init__('controller')
         self.publisher_ = self.create_publisher(String, 'velocity', 10)
         self.get_logger().info('Teleop node started, use W/A/S/D for movement, Ctrl+C to quit')
-        #timer_period = 0.5  # seconds
-        #self.timer = self.create_timer(timer_period, self.timer_callback)
-        #self.i = 0
 
-    #def timer_callback(self):
-    #    msg = String()
-    #    msg.data = 'Hello World: %d' % self.i
-    #    self.publisher_.publish(msg)
-    #    self.get_logger().info('Publishing: "%s"' % msg.data)
-    #    self.i += 1
     def run(self):
         settings = termios.tcgetattr(sys.stdin)
         try:
@@ -59,7 +59,7 @@ class Controller(Node):
                 
                 if key == '\x03':  # Ctrl+C
                     break
-                cmd = COMMANDS.get(key)
+                cmd = NEW_COMMANDS.get(key)
                 if cmd is not None:
                     msg = String()
                     msg.data = cmd
