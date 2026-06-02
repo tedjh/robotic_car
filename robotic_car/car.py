@@ -16,7 +16,7 @@ class Car(Node):
             self.listener_callback,
             10)
         self.subscription
-        self.ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
+        self.ser = serial.Serial('/dev/ttyAMA0', 9600, timeout=1)
     
     def listener_callback(self, msg):
         self.get_logger().info('I heard: "%s"' % msg.data)
