@@ -144,7 +144,7 @@ class Controller(Node):
 
                 self.current_state = cmd  # Update current state to the new command
                 # Publish the command to the 'velocity' topic.
-                msg = String(data=cmd.to_command_string())
+                msg = String(data=f"{cmd.to_command_string()}\n")
                 self.publisher_.publish(msg)
                 self.get_logger().info(f"Published command: {repr(cmd)}")
                 sleep(

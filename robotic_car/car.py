@@ -26,7 +26,8 @@ def main(args=None):
             car = Car()
             rclpy.spin(car)
     except (KeyboardInterrupt, ExternalShutdownException):
-        car.ser.close()
+        pass
+        # car.ser.close()  # type: ignore
 
 
 if __name__ == "__main__":

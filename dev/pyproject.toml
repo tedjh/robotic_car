@@ -11,6 +11,7 @@ dev-dependencies = [
     "pre-commit",
     "setuptools",
     "pyserial",
+    "opencv-python",
 ]
 
 [tool.pyright]
