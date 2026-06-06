@@ -26,7 +26,8 @@ setup(
         "console_scripts": [
             "controller = robotic_car.controller:main",
             "car = robotic_car.car:main",
-            "data_collection_node = robotic_car.data_collection:main",
+            "data_collection = robotic_car.data_collection:main",
+            "camera = robotic_car.camera:main",
         ],
     },
 )
