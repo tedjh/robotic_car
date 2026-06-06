@@ -19,11 +19,11 @@ class DataCollectionNode(Node):
         super().__init__("data_collection_node")
 
         self.bridge = CvBridge()
-        self.save_dir = (
+        self.save_dir = Path(
             "C:\\Users\\tedjh\\Documents\\ml_projects\\robotic_car\\training_data"
         )
         self.get_logger().info(f"Saving data to {self.save_dir}")
-        os.makedirs(self.save_dir, exist_ok=True)
+        self.save_dir.mkdir(parents=True, exist_ok=True)
 
         # Open CSV to log controls alongside image filenames
         self.csv_file = open(f"{self.save_dir}/labels.csv", "a")
@@ -32,7 +32,7 @@ class DataCollectionNode(Node):
 
         # Synchronised subscribers
         image_sub = message_filters.Subscriber(self, Image, "/camera/image_raw")
-        cmd_sub = message_filters.Subscriber(self, String, "/velocity")
+        cmd_sub = message_filters.Subscriber(self, String, "velocity")
 
         self.sync = message_filters.ApproximateTimeSynchronizer(
             [image_sub, cmd_sub], queue_size=10, slop=0.1
@@ -55,14 +55,12 @@ class DataCollectionNode(Node):
 
 
 def main(args=None):
-    try:
-        with rclpy.init(args=args):
-            node = DataCollectionNode()
+    with rclpy.init(args=args):
+        node = DataCollectionNode()
+        try:
             rclpy.spin(node)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        node.destroy_node()
+        finally:
+            node.destroy_node()
 
 
 if __name__ == "__main__":

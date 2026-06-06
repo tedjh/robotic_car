@@ -21,13 +21,13 @@ class Car(Node):
 
 
 def main(args=None):
-    try:
-        with rclpy.init(args=args):
-            car = Car()
+    with rclpy.init(args=args):
+        car = Car()
+        try:
             rclpy.spin(car)
-    except (KeyboardInterrupt, ExternalShutdownException):
-        pass
-        # car.ser.close()  # type: ignore
+        except (KeyboardInterrupt, ExternalShutdownException):
+            pass
+            # car.ser.close()  # type: ignore
 
 
 if __name__ == "__main__":
