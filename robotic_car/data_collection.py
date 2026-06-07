@@ -11,7 +11,6 @@ from rclpy.node import Node
 from sensor_msgs.msg import Image
 from std_msgs.msg import String
 
-# BASE_DIR = Path(__file__).resolve().parent
 
 
 class DataCollectionNode(Node):
@@ -19,9 +18,7 @@ class DataCollectionNode(Node):
         super().__init__("data_collection_node")
 
         self.bridge = CvBridge()
-        self.save_dir = Path(
-            "C:\\Users\\tedjh\\Documents\\ml_projects\\robotic_car\\training_data"
-        )
+        self.save_dir = Path.home() / "Documents" /"ml_projects" / "robotic_car" / "training_data"
         self.get_logger().info(f"Saving data to {self.save_dir}")
         self.save_dir.mkdir(parents=True, exist_ok=True)
 
@@ -50,8 +47,13 @@ class DataCollectionNode(Node):
 
         # Log controls
         self.csv_writer.writerow([filename, cmd_msg.data])
+        self.csv_file.flush()
 
         self.get_logger().info(f"Saved {filename}")
+
+    def destroy_node(self):
+        self.csv_file.close()
+        super().destroy_node()
 
 
 def main(args=None):
