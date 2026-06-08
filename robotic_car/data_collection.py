@@ -1,5 +1,4 @@
 import csv
-import os
 from datetime import datetime
 from pathlib import Path
 
@@ -12,31 +11,37 @@ from sensor_msgs.msg import Image
 from std_msgs.msg import String
 
 
-
 class DataCollectionNode(Node):
     def __init__(self):
         super().__init__("data_collection_node")
 
+        self.declare_parameter("input_prompt", "Drive to the kitchen")
+        self.declare_parameter("episode", 1)
         self.bridge = CvBridge()
-        self.save_dir = Path.home() / "Documents" /"ml_projects" / "robotic_car" / "training_data"
+        self.save_dir = (
+            Path.home()
+            / "robotic_car"
+            / "training_data"
+            / f"episode_{self.get_parameter('episode').value}"
+        )
         self.get_logger().info(f"Saving data to {self.save_dir}")
         self.save_dir.mkdir(parents=True, exist_ok=True)
 
         # Open CSV to log controls alongside image filenames
         self.csv_file = open(f"{self.save_dir}/labels.csv", "a")
         self.csv_writer = csv.writer(self.csv_file)
-        self.csv_writer.writerow(["image_filename", "state"])
+        self.csv_writer.writerow(["episode", "input_prompt", "image_filename", "state"])
 
         # Synchronised subscribers
         image_sub = message_filters.Subscriber(self, Image, "/camera/image_raw")
         cmd_sub = message_filters.Subscriber(self, String, "velocity")
 
         self.sync = message_filters.ApproximateTimeSynchronizer(
-            [image_sub, cmd_sub], queue_size=10, slop=0.1
+            [image_sub, cmd_sub], queue_size=10, slop=0.1, allow_headerless=True
         )  # 100ms tolerance for matching messages
         self.sync.registerCallback(self.sync_callback)
 
-    def sync_callback(self, image_msg, cmd_msg):
+    def sync_callback(self, image_msg, cmd_msg: String):
         # Convert ROS image to OpenCV
         frame = self.bridge.imgmsg_to_cv2(image_msg, desired_encoding="bgr8")
 
@@ -46,7 +51,14 @@ class DataCollectionNode(Node):
         cv2.imwrite(f"{self.save_dir}/{filename}", frame)
 
         # Log controls
-        self.csv_writer.writerow([filename, cmd_msg.data])
+        self.csv_writer.writerow(
+            [
+                self.get_parameter("episode").value,
+                self.get_parameter("input_prompt").value,
+                filename,
+                cmd_msg.data.encode(),
+            ]
+        )
         self.csv_file.flush()
 
         self.get_logger().info(f"Saved {filename}")

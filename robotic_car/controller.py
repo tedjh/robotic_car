@@ -23,15 +23,6 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
 
-COMMANDS = {
-    "w": "W",  # forward
-    "r": "R",  # backward
-    "a": "A",  # left
-    "d": "D",  # right
-    "s": "S",  # stop
-    "q": None,  # quit
-}
-
 
 @dataclass
 class Action:
@@ -52,7 +43,7 @@ class Action:
 
 
 @dataclass
-class BASIC_COMMANDS:
+class COMMANDS:
     forward: Action = field(default_factory=lambda: Action(150, 1, 150, 1))  # forward
     backward: Action = field(default_factory=lambda: Action(150, 0, 150, 0))  # backward
     left: Action = field(default_factory=lambda: Action(70, 1, 150, 1))  # left
@@ -119,7 +110,7 @@ class Controller(Node):
 
         self.command_wait_time = 0.1  # seconds
         self.action_buffer: deque[Action] = deque([])
-        self.current_state: Action = BASIC_COMMANDS().stop  # Start in stopped state
+        self.current_state: Action = COMMANDS().stop  # Start in stopped state
         self.number_transition_steps: int = 5
 
     def run(self):
@@ -139,8 +130,6 @@ class Controller(Node):
 
                 # Get next action to perform, and remove from the buffer.
                 cmd = self.next_action()
-                if cmd is None:
-                    continue
 
                 self.current_state = cmd  # Update current state to the new command
                 # Publish the command to the 'velocity' topic.
@@ -159,7 +148,7 @@ class Controller(Node):
         if key is None:
             return
 
-        target_action = BASIC_COMMANDS().get_action(key)
+        target_action = COMMANDS().get_action(key)
 
         # No need to update if the command is the same as current state
         if target_action is None or self.current_state == target_action:
@@ -252,8 +241,10 @@ class Controller(Node):
             buffer.append((target_speed, target_direction))
         return buffer
 
-    def next_action(self) -> Action | None:
-        return self.action_buffer.popleft() if self.action_buffer else None
+    def next_action(self) -> Action:
+        return (
+            self.action_buffer.popleft() if self.action_buffer else self.current_state
+        )
 
 
 def main(args=None):
