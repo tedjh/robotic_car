@@ -131,11 +131,13 @@ class Controller(Node):
                 # Get next action to perform, and remove from the buffer.
                 cmd = self.next_action()
 
+                if self.current_state != cmd:
+                    self.get_logger().info(f"Publishing command: {repr(cmd)}")
+
                 self.current_state = cmd  # Update current state to the new command
                 # Publish the command to the 'velocity' topic.
                 msg = String(data=f"{cmd.to_command_string()}\n")
                 self.publisher_.publish(msg)
-                self.get_logger().info(f"Published command: {repr(cmd)}")
                 sleep(
                     self.command_wait_time
                 )  # Small delay to prevent flooding the topic
