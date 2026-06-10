@@ -13,3 +13,5 @@ Thumbs.db
 .idea/
 __pycache__/
 *.pyc
+models/
+training_data/

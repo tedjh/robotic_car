@@ -1,7 +1,7 @@
 [project]
-name = "ros2-package"
+name = "robotic_car"
 version = "0.1.0"
-description = "A ROS2 package"
+description = "A ROS2 package and Pi Zero model"
 requires-python = ">=3.10"
 
 [tool.uv]
@@ -12,7 +12,33 @@ dev-dependencies = [
     "setuptools",
     "pyserial",
     "opencv-python",
+    "torch",
+    "pillow",
+    "accelerate",
+    "transformers",
+    "tqdm>=4.65.0",
+    "matplotlib",
+    "mlflow",
+    "torchvision",
+    "sentencepiece",
 ]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+torchvision = { index = "pytorch-cu128" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+]
+
+[project.scripts]
+course-builder = "robotic_car.__main__:main"
 
 [tool.pyright]
 pythonVersion = "3.10"
