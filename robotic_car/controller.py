@@ -21,6 +21,7 @@ from time import sleep
 
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 from std_msgs.msg import String
 
 
@@ -44,10 +45,10 @@ class Action:
 
 @dataclass
 class COMMANDS:
-    forward: Action = field(default_factory=lambda: Action(150, 1, 150, 1))  # forward
-    backward: Action = field(default_factory=lambda: Action(150, 0, 150, 0))  # backward
-    left: Action = field(default_factory=lambda: Action(70, 1, 150, 1))  # left
-    right: Action = field(default_factory=lambda: Action(150, 1, 70, 1))  # right
+    forward: Action = field(default_factory=lambda: Action(100, 1, 100, 1))  # forward
+    backward: Action = field(default_factory=lambda: Action(100, 0, 100, 0))  # backward
+    left: Action = field(default_factory=lambda: Action(30, 1, 150, 1))  # left
+    right: Action = field(default_factory=lambda: Action(150, 1, 30, 1))  # right
     stop: Action = field(default_factory=lambda: Action(0, 1, 0, 1))  # stop
 
     def get_string_command(self, key: str) -> str | None:
@@ -103,7 +104,12 @@ def get_key_no_blocking(settings) -> str | None:
 class Controller(Node):
     def __init__(self):
         super().__init__("controller")
-        self.publisher_ = self.create_publisher(String, "velocity", 10)
+        qos = QoSProfile(
+            reliability=QoSReliabilityPolicy.BEST_EFFORT,
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=1,
+        )
+        self.publisher_ = self.create_publisher(String, "velocity", qos)
         self.get_logger().info(
             "Teleop node started, use W/A/S/D for movement, Ctrl+C to quit"
         )
@@ -111,7 +117,7 @@ class Controller(Node):
         self.command_wait_time = 0.1  # seconds
         self.action_buffer: deque[Action] = deque([])
         self.current_state: Action = COMMANDS().stop  # Start in stopped state
-        self.number_transition_steps: int = 5
+        self.number_transition_steps: int = 2
 
     def run(self):
         settings = termios.tcgetattr(sys.stdin)

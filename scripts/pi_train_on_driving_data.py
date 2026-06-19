@@ -5,6 +5,8 @@ from pi_zero.pi_model import SmallPi0
 from pi_zero.pi_trainer import PiTrainer
 from torch.utils.data import DataLoader
 
+ROOT = Path(__file__).parents[1]
+
 
 def main(
     training_data_path: Path,
@@ -18,7 +20,11 @@ def main(
     batch = next(iter(dataloader))
     state_dim, action_dim = batch["state"].shape[-1], batch["actions"].shape[-1]
     pi = SmallPi0.from_pretrained(
-        model_id, device, action_dim=action_dim, state_dim=state_dim
+        pretrained_model_name_or_path=model_id,
+        device=device,
+        action_dim=action_dim,
+        state_dim=state_dim,
+        cache_dir=ROOT / "models",
     )
     print("Model loaded successfully.")
 
@@ -28,5 +34,5 @@ def main(
 
 
 if __name__ == "__main__":
-    training_data_path = Path("robotic_car") / "training_data" / "driving_dataset.pt"
+    training_data_path = ROOT / "training_data" / "driving_dataset.pt"
     main(training_data_path)

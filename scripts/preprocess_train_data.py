@@ -5,12 +5,8 @@ import torch
 from torchvision.io import read_image
 from transformers import AutoTokenizer, SiglipProcessor
 
-example_data_path = Path(r"\\wsl.localhost\Ubuntu\home\tedjh\robotic_car\training_data")
-out_data = Path("training_data")
-speed_max = 255
 
-
-def preprocess_state(state_str: str) -> torch.Tensor:
+def preprocess_state(state_str: str, speed_max: int = 255) -> torch.Tensor:
     # state_str has form "b'0,1,0,1\n'".
     state_str = state_str.strip().strip("b'")[:-2]
     left_speed, left_dir, right_speed, right_dir = map(float, state_str.split(","))
@@ -23,6 +19,8 @@ def preprocess_state(state_str: str) -> torch.Tensor:
 
 
 def main(
+    example_data_path: Path,
+    output_path: Path,
     action_horizon: int = 10,
     model_id: str = "google/paligemma2-3b-pt-224",
 ) -> None:
@@ -39,20 +37,26 @@ def main(
         with open(episode_dir / "labels.csv", newline="", encoding="utf-8") as csv_file:
             rows = list(csv.DictReader(csv_file))  # header consumed automatically
 
+        # Preprocess the states/actions for every timestep of the episode. This done
+        # once per episode to avoid repeated parsing of the same strings.
         states_list = [preprocess_state(row["state"]) for row in rows]
         tokenized_prompt = None
+
+        # Process each timestep of the episode.
         for i, row in enumerate(rows):
-            if (
-                i > len(rows) - action_horizon - 1
-            ):  # Skip last few rows without enough future actions
+            if i > len(rows) - action_horizon - 1:
+                # Skip last rows that wouldn't have enough future actions
                 break
 
+            # Input prompt is fixed for the episode, so tokenize it just once.
             if i == 0:
                 tokenized_prompt = tokenizer(
                     row["input_prompt"],
                     padding=True,
                     return_tensors="pt",
                 )
+
+            # Read image token at current timestep and convert to preprocessed tensor.
             image_tensor = read_image(str(episode_dir / row["image_filename"]))
             image_tensor = processor(image_tensor, return_tensors="pt")["pixel_values"]  # type: ignore
             assert tokenized_prompt is not None, (
@@ -72,8 +76,9 @@ def main(
 
         print(f"Finished processing {episode_dir.name}")
 
-    torch.save(dataset, out_data / "driving_dataset.pt")
+    torch.save(dataset, output_path / "driving_dataset.pt")
 
 
 if __name__ == "__main__":
-    main()
+    EXAMPLE_DATA_PATH = Path("/home/tedjh/robotic_car/training_data")
+    main(example_data_path=EXAMPLE_DATA_PATH, output_path=Path("training_data"))

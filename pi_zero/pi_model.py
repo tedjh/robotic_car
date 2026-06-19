@@ -280,151 +280,18 @@ class SmallPi0(nn.Module):
     @classmethod
     def from_pretrained(
         cls,
+        *,
         pretrained_model_name_or_path: str = "google/paligemma2-3b-pt-224",
         device: torch.device | None = None,
+        cache_dir: Path,
         **kwargs,
     ):
         """Load SmallPi0 from a pretrained PaliGemma checkpoint."""
         full_model = PaliGemmaForConditionalGeneration.from_pretrained(
             pretrained_model_name_or_path,
-            cache_dir=Path(__file__).parent.parent / "models" / "paligemma2-3b-pt-224",
+            cache_dir=cache_dir / pretrained_model_name_or_path,
             torch_dtype=torch.bfloat16,
             device_map=device if device is not None else "auto",
             local_files_only=True,
         )
         return cls(full_model=full_model, **kwargs).to(device)
-
-
-class PiTrainer:
-    def __init__(
-        self,
-        pi: SmallPi0,
-        training_loader: torch.utils.data.DataLoader,
-        epochs: int = 100,
-        lr: float = 1e-4,
-        weight_decay: float = 1e-4,
-        experiment_name: str = "small_pi0",
-        run_name: str | None = None,
-    ):
-        self.pi: SmallPi0 = pi
-        self.lr = lr
-        self.weight_decay = weight_decay
-        self.optimizer = torch.optim.AdamW(
-            filter(lambda p: p.requires_grad, self.pi.parameters()),
-            lr=lr,
-            weight_decay=weight_decay,
-        )
-        self.epochs = epochs
-        self.training_loader = training_loader
-        self.experiment_name = experiment_name
-        self.run_name = run_name
-
-    def train_step(
-        self,
-        image: torch.Tensor,
-        prompt_tokens: torch.Tensor,
-        prompt_mask: torch.Tensor,
-        state: torch.Tensor,
-        noised_actions: torch.Tensor,
-        noise_level: torch.Tensor,
-        target_actions: torch.Tensor,
-    ) -> float:
-        self.optimizer.zero_grad()
-        device = self.pi.device
-        interpolated_actions = (
-            1 - noise_level[:, None, None]
-        ) * noised_actions + noise_level[:, None, None] * target_actions
-        target_vector_field = target_actions - noised_actions
-        pred: torch.Tensor = self.pi(
-            image.to(device),
-            prompt_tokens.to(device),
-            prompt_mask.to(device),
-            state.to(device),
-            interpolated_actions.to(device),
-            noise_level.to(device),
-        )
-        loss = nn.functional.mse_loss(pred[:, 1:, :], target_vector_field)
-        loss.backward()
-        self.optimizer.step()
-        return loss.item()
-
-    def _log_params(self) -> None:
-        trainable = sum(p.numel() for p in self.pi.parameters() if p.requires_grad)
-        total = sum(p.numel() for p in self.pi.parameters())
-        mlflow.log_params(
-            {
-                "lr": self.lr,
-                "weight_decay": self.weight_decay,
-                "epochs": self.epochs,
-                "batch_size": self.training_loader.batch_size,
-                "n_action_layers": self.pi.n_action_layers,
-                "n_action_attention_heads": self.pi.n_action_attention_heads,
-                "gemma_hidden_dim": self.pi.gemma_hidden_dim,
-                "trainable_params": trainable,
-                "total_params": total,
-            }
-        )
-
-    def run(self):
-        mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-        mlflow.set_experiment(self.experiment_name)
-        with mlflow.start_run(run_name=self.run_name):
-            self._log_params()
-            global_step = 0
-            pbar = tqdm(range(self.epochs))
-            for epoch in pbar:
-                epoch_losses = []
-                for batch in self.training_loader:
-                    loss = self.train_step(*batch)
-                    mlflow.log_metric("train/loss", loss, step=global_step)
-                    epoch_losses.append(loss)
-                    global_step += 1
-                mean_loss = sum(epoch_losses) / len(epoch_losses)
-                mlflow.log_metric("train/loss_epoch_mean", mean_loss, step=epoch)
-                pbar.set_postfix(loss=epoch_losses[-1], epoch=epoch)
-
-
-if __name__ == "__main__":
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model_id = "google/paligemma2-3b-pt-224"
-    tokenizer = AutoTokenizer.from_pretrained(model_id)
-    pi = SmallPi0.from_pretrained(model_id, device)
-    print("Model loaded successfully.")
-    dataset_size = 90
-    batch_size = 3
-    images = torch.randn(batch_size, 3, 224, 224, device=device)
-    tokenized_prompts = tokenizer(
-        ["drive forward", "go to the living room", "brake"],
-        padding=True,
-        return_tensors="pt",
-    )
-    prompt_tokens = tokenized_prompts.input_ids.to(device)
-    # prompt_tokens = prompt_tokens.repeat
-    prompt_mask = tokenized_prompts.attention_mask.to(device)
-    state = torch.randn(batch_size, 2, device=device)
-    noised_actions = torch.randn(batch_size, 10, 2, device=device)
-    noise_level = torch.rand(batch_size, device=device)
-    target_actions = torch.randn(batch_size, 10, 2, device=device)
-
-    training_loader = torch.utils.data.DataLoader(
-        torch.utils.data.TensorDataset(
-            images,
-            prompt_tokens,
-            prompt_mask,
-            state,
-            noised_actions,
-            noise_level,
-            target_actions,
-        ),
-        batch_size=batch_size,
-        shuffle=True,
-    )
-    print("Dataloader built")
-
-    trainer = PiTrainer(
-        pi, training_loader=training_loader
-    )  # Assuming you have a training loader
-    print("Training starting...")
-    trainer.run()
-    # output = pi(image, prompt_tokens, prompt_mask, state, noised_actions, noise_level)
-    # print(loss)  # should be a scalar value

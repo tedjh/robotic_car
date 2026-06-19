@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import mlflow
 import torch
 from pi_zero.pi_model import SmallPi0
@@ -17,6 +19,8 @@ class PiTrainer:
         weight_decay: float = 1e-4,
         experiment_name: str = "small_pi0",
         run_name: str | None = None,
+        checkpoint_dir: Path | None = None,
+        checkpoint_freq: int = 10,
     ):
         self.pi: SmallPi0 = pi
         self.lr = lr
@@ -30,6 +34,8 @@ class PiTrainer:
         self.training_loader = training_loader
         self.experiment_name = experiment_name
         self.run_name = run_name
+        self.checkpoint_dir = checkpoint_dir
+        self.checkpoint_freq = checkpoint_freq
 
     def train_step(
         self,
@@ -37,8 +43,6 @@ class PiTrainer:
         prompt_mask: torch.Tensor,
         image: torch.Tensor,
         state: torch.Tensor,
-        # noised_actions: torch.Tensor,
-        # noise_level: torch.Tensor,
         actions: torch.Tensor,
     ) -> float:
         self.optimizer.zero_grad()
@@ -86,6 +90,25 @@ class PiTrainer:
             }
         )
 
+    def _save_checkpoint(self, epoch: int) -> None:
+        assert self.checkpoint_dir is not None
+        self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        trainable_keys = {
+            name for name, p in self.pi.named_parameters() if p.requires_grad
+        }
+        path = self.checkpoint_dir / f"checkpoint_epoch_{epoch}.pt"
+        torch.save(
+            {
+                "epoch": epoch,
+                "model_state_dict": {
+                    k: v for k, v in self.pi.state_dict().items() if k in trainable_keys
+                },
+                "optimizer_state_dict": self.optimizer.state_dict(),
+            },
+            path,
+        )
+        mlflow.log_artifact(str(path))
+
     def run(self) -> None:
         mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
         mlflow.set_experiment(self.experiment_name)
@@ -103,3 +126,10 @@ class PiTrainer:
                 mean_loss = sum(epoch_losses) / len(epoch_losses)
                 mlflow.log_metric("train/loss_epoch_mean", mean_loss, step=epoch)
                 pbar.set_postfix(loss=epoch_losses[-1], epoch=epoch)
+                if (
+                    self.checkpoint_dir is not None
+                    and (epoch + 1) % self.checkpoint_freq == 0
+                ):
+                    self._save_checkpoint(epoch)
+        if self.checkpoint_dir is not None and self.epochs % self.checkpoint_freq != 0:
+            self._save_checkpoint(self.epochs - 1)

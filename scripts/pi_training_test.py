@@ -1,7 +1,22 @@
+from pathlib import Path
+
 import torch
 from pi_zero.pi_model import SmallPi0
 from pi_zero.pi_trainer import PiTrainer
 from transformers import AutoTokenizer
+
+ROOT = Path(__file__).parents[1]
+
+
+class ListDataset(torch.utils.data.Dataset):
+    def __init__(self, data: list[dict]):
+        self.data = data
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        return self.data[idx]
 
 
 def main(
@@ -13,8 +28,17 @@ def main(
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     batch_size = len(prompts)
     tokenizer = AutoTokenizer.from_pretrained(model_id)
-    pi = SmallPi0.from_pretrained(model_id, device, action_dim=action_dim)
+    state_dim = action_dim  # Assume state_dim is the same as action_dim in this example
+
+    pi = SmallPi0.from_pretrained(
+        pretrained_model_name_or_path=model_id,
+        device=device,
+        action_dim=action_dim,
+        state_dim=state_dim,
+        cache_dir=ROOT / "models",
+    )
     print("Model loaded successfully.")
+
     images = torch.randn(batch_size, 3, 224, 224, device=device)
     tokenized_prompts = tokenizer(
         prompts,
@@ -24,28 +48,28 @@ def main(
     prompt_tokens = tokenized_prompts.input_ids.to(device)
     prompt_mask = tokenized_prompts.attention_mask.to(device)
     state = torch.randn(batch_size, action_dim, device=device)
-    noised_actions = torch.randn(batch_size, action_horizon, action_dim, device=device)
-    noise_level = torch.rand(batch_size, device=device)
-    target_actions = torch.randn(batch_size, action_horizon, action_dim, device=device)
+    actions = torch.randn(batch_size, action_horizon, action_dim, device=device)
 
     training_loader = torch.utils.data.DataLoader(
-        torch.utils.data.TensorDataset(
-            images,
-            prompt_tokens,
-            prompt_mask,
-            state,
-            noised_actions,
-            noise_level,
-            target_actions,
+        ListDataset(
+            [
+                {
+                    "image": images[i],
+                    "prompt_tokens": prompt_tokens[i],
+                    "prompt_mask": prompt_mask[i],
+                    "state": state[i],
+                    "actions": actions[i],
+                }
+                for i in range(batch_size)
+            ]
         ),
         batch_size=batch_size,
         shuffle=True,
     )
     print("Dataloader built")
 
-    trainer = PiTrainer(
-        pi, training_loader=training_loader
-    )  # Assuming you have a training loader
+    trainer = PiTrainer(pi, training_loader=training_loader, epochs=1)
+
     print("Training starting...")
     trainer.run()
 
