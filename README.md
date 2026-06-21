@@ -1,3 +1,4 @@
+## Notes
 1. Source the ROS2 setup files with: `source /opt/ros/kilted/setup.bash`.
 2. If anything doesn't work, try `ros2 daemon start`.
 3. Run Car node via: `ros2 run robotic_car car`
@@ -6,3 +7,5 @@
 6. When adding a new Node, remember to add it to the `setup.py` file.
 7. To start MLFlow server for experiment viewing run:
 `mlflow server --host 127.0.0.1 --port 5000`
+
+## Workflow Guide.

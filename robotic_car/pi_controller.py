@@ -1,14 +1,16 @@
 import rclpy
+import torch
 
-from robotic_car.controller_utils import COMMANDS, Action, BaseController
+from robotic_car.controller_utils import COMMANDS, BaseController
 
 
-class TeleOpController(BaseController):
+class PiController(BaseController):
     def __init__(self):
         super().__init__()
-        self.get_logger().info(
-            "Teleop node started, use W/A/S/D for movement, Ctrl+C to quit"
-        )
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.get_logger().info("Loading model")
+
+        self.get_logger().info("Use Ctrl+C to quit")
 
     def update_action_buffer(self, key: str | None) -> None:
         # If no new key was pressed, do not update the action buffer.
@@ -57,7 +59,7 @@ class TeleOpController(BaseController):
 
 def main(args=None):
     with rclpy.init(args=args):
-        controller = TeleOpController()
+        controller = PiController()
         try:
             controller.run()
         finally:

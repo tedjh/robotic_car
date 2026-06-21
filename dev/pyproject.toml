@@ -52,3 +52,6 @@ extraPaths = [
 
 [tool.ruff]
 line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["robotic_car/test"]

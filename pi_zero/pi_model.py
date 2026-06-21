@@ -1,12 +1,9 @@
 import math
 from pathlib import Path
 
-import mlflow
 import torch
 from torch import nn
-from tqdm import tqdm
 from transformers import (
-    AutoTokenizer,
     Gemma2Model,
     PaliGemmaForConditionalGeneration,
 )
@@ -137,13 +134,26 @@ class ActionExpertLayer(nn.Module):
 
 
 class SmallPi0(nn.Module):
+    # Submodules trained from scratch, as opposed to the frozen pretrained
+    # PaliGemma backbone (vision_encoder, projector, gemma).
+    TRAINABLE_MODULE_NAMES = (
+        "state_embedding",
+        "action_embedding_1",
+        "action_embedding_2",
+        "action_expert_layers",
+        "action_head",
+    )
+
     def __init__(
         self,
         full_model: PaliGemmaForConditionalGeneration,
         state_dim: int = 2,
         action_dim: int = 2,
+        action_horizon: int = 10,
     ):
         super().__init__()
+        self.action_horizon = action_horizon
+        self.action_dim = action_dim
 
         self.vision_encoder = full_model.model.vision_tower  # SiglipVisionModel
         self.projector = full_model.model.multi_modal_projector  # linear projection
@@ -185,6 +195,15 @@ class SmallPi0(nn.Module):
     def device(self) -> torch.device:
         return next(self.parameters()).device
 
+    def trainable_state_dict(self) -> dict[str, torch.Tensor]:
+        """State dict of the action expert (embeddings, action expert layers,
+        and action head), excluding the frozen pretrained PaliGemma backbone."""
+        return {
+            k: v
+            for k, v in self.state_dict().items()
+            if k.split(".", 1)[0] in self.TRAINABLE_MODULE_NAMES
+        }
+
     def forward(
         self,
         image: torch.Tensor,
@@ -194,9 +213,20 @@ class SmallPi0(nn.Module):
         noised_actions: torch.Tensor,
         noise_level: torch.Tensor,
     ):
-        """Forward pass for SmallPi0.
+        """
+        Forward pass for SmallPi0.
 
         This predicts the vector field over action tokens.
+
+        :param image: (batch, 3, H, W) input image tensor.
+        :param prompt_tokens: (batch, prompt_length) input prompt tokens.
+        :param prompt_mask: (batch, prompt_length) attention mask for prompt tokens.
+        :param state: (batch, state_dim) input state tensor.
+        :param noised_actions: (batch, action_horizon_length, action_dim) noised action
+            tokens.
+        :param noise_level: (batch,) noise level for each sample in the batch.
+        :return: (batch, action_horizon_length, action_dim) predicted vector field over
+            actions.
         """
         if not (
             isinstance(self.vision_encoder, nn.Module)
@@ -277,6 +307,41 @@ class SmallPi0(nn.Module):
 
         return self.action_head(state_action_embeds)  # predicted velocity field
 
+    def sample(
+        self,
+        image: torch.Tensor,
+        prompt_tokens: torch.Tensor,
+        prompt_mask: torch.Tensor,
+        state: torch.Tensor,
+        n_steps: int = 10,
+    ) -> torch.Tensor:
+        """Sample actions from SmallPi0 using Euler integration."""
+        batch_size = state.shape[0]
+        noised_actions = torch.randn(
+            batch_size, self.action_horizon, self.action_dim, device=self.device
+        )
+        ts = torch.linspace(0, 1, n_steps + 1, device=self.device)
+        dt = 1.0 / n_steps
+        with torch.no_grad():
+            # Perform Euler integration over the action velocity field.
+            for t in ts[:-1]:
+                t_batch = t.expand(batch_size, 1)
+                noised_actions = (
+                    noised_actions
+                    + dt
+                    * self(
+                        image.to(self.device),
+                        prompt_tokens.to(self.device),
+                        prompt_mask.to(self.device),
+                        state.to(self.device),
+                        noised_actions,
+                        t_batch,
+                    )[:, 1:, :]  # Model output has shape action_horizon + 1, with +1
+                    # coming from the state embedding. We must avoid altering this state
+                    # dim during the Euler integration.
+                )
+        return noised_actions[:, 1:, :]
+
     @classmethod
     def from_pretrained(
         cls,
@@ -295,3 +360,42 @@ class SmallPi0(nn.Module):
             local_files_only=True,
         )
         return cls(full_model=full_model, **kwargs).to(device)
+
+    @classmethod
+    def from_checkpoint(
+        cls,
+        checkpoint_path: Path,
+        *,
+        pretrained_model_name_or_path: str = "google/paligemma2-3b-pt-224",
+        device: torch.device | None = None,
+        cache_dir: Path,
+        **kwargs,
+    ) -> "SmallPi0":
+        """Load SmallPi0 from a PiTrainer checkpoint.
+
+        Rebuilds the frozen PaliGemma backbone from `pretrained_model_name_or_path`
+        and restores the trained action expert weights from `checkpoint_path`.
+        """
+        model = cls.from_pretrained(
+            pretrained_model_name_or_path=pretrained_model_name_or_path,
+            device=device,
+            cache_dir=cache_dir,
+            **kwargs,
+        )
+        checkpoint = torch.load(checkpoint_path, map_location=model.device)
+        missing_keys, unexpected_keys = model.load_state_dict(
+            checkpoint["model_state_dict"], strict=False
+        )
+        if unexpected_keys:
+            raise RuntimeError(f"Unexpected keys in checkpoint: {unexpected_keys}")
+        backbone_keys = {
+            k
+            for k in model.state_dict()
+            if k.split(".", 1)[0] not in cls.TRAINABLE_MODULE_NAMES
+        }
+        missing_trainable_keys = set(missing_keys) - backbone_keys
+        if missing_trainable_keys:
+            raise RuntimeError(
+                f"Checkpoint is missing trainable weights: {missing_trainable_keys}"
+            )
+        return model

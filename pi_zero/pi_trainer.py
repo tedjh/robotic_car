@@ -93,16 +93,11 @@ class PiTrainer:
     def _save_checkpoint(self, epoch: int) -> None:
         assert self.checkpoint_dir is not None
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        trainable_keys = {
-            name for name, p in self.pi.named_parameters() if p.requires_grad
-        }
         path = self.checkpoint_dir / f"checkpoint_epoch_{epoch}.pt"
         torch.save(
             {
                 "epoch": epoch,
-                "model_state_dict": {
-                    k: v for k, v in self.pi.state_dict().items() if k in trainable_keys
-                },
+                "model_state_dict": self.pi.trainable_state_dict(),
                 "optimizer_state_dict": self.optimizer.state_dict(),
             },
             path,
